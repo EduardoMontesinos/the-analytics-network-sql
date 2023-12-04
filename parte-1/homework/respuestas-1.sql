@@ -172,15 +172,64 @@ group by a.store_id, b.name
 -- 6. Cual es el nivel de inventario promedio en cada mes a nivel de codigo de producto y tienda; mostrar el resultado con el nombre de la tienda.
   
 -- 7. Calcular la cantidad de unidades vendidas por material. Para los productos que no tengan material usar 'Unknown', homogeneizar los textos si es necesario.
-  
+select 
+	case 
+		when material is null then 'Unkown'
+		else initcap(material)
+	end
+	, sum(quantity) as unidades_vendidas
+from stg.product_master a
+left join stg.order_line_sale b
+on a.product_code=b.product
+group by 
+	case 
+		when material is null then 'Unkown'
+		else initcap(material)
+	end
+	
 -- 8. Mostrar la tabla order_line_sales agregando una columna que represente el valor de venta bruta en cada linea convertido a dolares usando la tabla de tipo de cambio.
-  
+select 
+	a.*
+	, case 
+		when currency = 'EUR' then ((a.quantity * a.sale)* fx_rate_usd_eur) 
+		when currency = 'ARS' then ((a.quantity * a.sale)* fx_rate_usd_peso) 
+		else ((a.quantity * a.sale)* fx_rate_usd_uru)
+	 end as ventas_brutas_USD
+from stg.order_line_sale a
+left join stg.monthly_average_fx_rate b
+on a.date=b.month
+
 -- 9. Calcular cantidad de ventas totales de la empresa en dolares.
-  
+select 
+	sum(
+	case 
+		when currency = 'EUR' then ((a.quantity * a.sale)* fx_rate_usd_eur) 
+		when currency = 'ARS' then ((a.quantity * a.sale)* fx_rate_usd_peso) 
+		else ((a.quantity * a.sale)* fx_rate_usd_uru)
+	 end )as ventas_brutas_USD
+from stg.order_line_sale a
+left join stg.monthly_average_fx_rate b
+on a.date=b.month
 -- 10. Mostrar en la tabla de ventas el margen de venta por cada linea. Siendo margen = (venta - descuento) - costo expresado en dolares.
-  
+select 
+	a.*
+	, case 
+		when currency = 'EUR' then ( ((a.sale - coalesce(a.promotion, 0))- costo) * fx_rate_usd_eur ) 
+		when currency = 'ARS' then ((a.quantity * a.sale)* fx_rate_usd_peso) 
+		else ((a.quantity * a.sale)* fx_rate_usd_uru)
+	 end as ventas_brutas_USD
+from stg.order_line_sale a
+left join stg.monthly_average_fx_rate b
+on a.date=b.month
 -- 11. Calcular la cantidad de items distintos de cada subsubcategoria que se llevan por numero de orden.
-  
+select distinct
+	a. order_number
+	, b.subcategory
+	, count(a.product) as cantidad_items
+from stg.order_line_sale a
+left join stg.product_master b on a.product = b.product_code
+group by 1,2
+order by 1
 
 -- ## Semana 2 - Parte B
 
