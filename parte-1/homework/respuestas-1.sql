@@ -233,25 +233,129 @@ order by 1
 
 -- ## Semana 2 - Parte B
 
+
 -- 1. Crear un backup de la tabla product_master. Utilizar un esquema llamada "bkp" y agregar un prefijo al nombre de la tabla con la fecha del backup en forma de numero entero.
-  
+-- creamos la tabla bakcup
+CREATE SCHEMA IF NOT EXISTS bkp;
+
+do $$
+
+declare
+	schema_name TEXT := 'bkp';
+	table_name TEXT := to_char(now(), 'YYYYMMDD') || '_' || 'product_master';
+	full_table_name TEXT := schema_name || '.' || table_name;
+BEGIN
+EXECUTE 'CREATE SCHEMA IF NOT EXISTS ' || quote_ident(schema_name);	
+--CREATE TABLE IF NOT EXISTS bkp.table_name
+EXECUTE 'CREATE TABLE ' || quote_ident(full_table_name) || 
+' (
+    product_code character varying(255) COLLATE pg_catalog."default",
+    name character varying(255) COLLATE pg_catalog."default",
+    category character varying(255) COLLATE pg_catalog."default",
+    subcategory character varying(255) COLLATE pg_catalog."default",
+    subsubcategory character varying(255) COLLATE pg_catalog."default",
+    material character varying(255) COLLATE pg_catalog."default",
+    color character varying(255) COLLATE pg_catalog."default",
+    origin character varying(255) COLLATE pg_catalog."default",
+    ean bigint,
+    is_active boolean,
+    has_bluetooth boolean,
+    size character varying(255) COLLATE pg_catalog."default"
+)
+ ';
+end $$;
+-- introducimos los datos
+insert into  bkp."20231205_product_master" 
+(select * from stg.product_master)
+
+select * FROM bkp."20231205_product_master"
+	
 -- 2. Hacer un update a la nueva tabla (creada en el punto anterior) de product_master agregando la leyendo "N/A" para los valores null de material y color. Pueden utilizarse dos sentencias.
+update bkp."20231205_product_master"
+set material = 'N/A' where material is NULL
+
+update bkp."20231205_product_master"
+set color = 'N/A' where color is NULL
   
 -- 3. Hacer un update a la tabla del punto anterior, actualizando la columa "is_active", desactivando todos los productos en la subsubcategoria "Control Remoto".
-  
+update bkp."20231205_product_master"
+set is_active = 'false' where subsubcategory = 'Control remoto'
+
 -- 4. Agregar una nueva columna a la tabla anterior llamada "is_local" indicando los productos producidos en Argentina y fuera de Argentina.
-  
+alter table bkp."20231205_product_master"
+add is_local varchar(10)
+
+update bkp."20231205_product_master"
+set is_local = 'yes' where origin='Argentina'
+
+update bkp."20231205_product_master"
+set is_local = 'no' where origin != 'Argentina'
 -- 5. Agregar una nueva columna a la tabla de ventas llamada "line_key" que resulte ser la concatenacion de el numero de orden y el codigo de producto.
-  
+alter table bkp."20231205_product_master"
+add line_key varchar(100)
+
+update bkp."20231205_product_master" a 
+set line_key = b.order_number || '_' || b.product 
+				from stg.order_line_sale b
+			   	where b.product = a.product_code
+
+
 -- 6. Crear una tabla llamada "employees" (por el momento vacia) que tenga un id (creado de forma incremental), name, surname, start_date, end_name, phone, country, province, store_id, position. Decidir cual es el tipo de dato mas acorde.
-  
+CREATE TABLE IF NOT EXISTS stg.employees
+(
+	id serial ,
+	name character varying(255) COLLATE pg_catalog."default",
+	surname character varying(255) COLLATE pg_catalog."default",
+	start_date date,
+	end_name date,
+	phone bigint,
+	country character varying(255) COLLATE pg_catalog."default",
+	province character varying(255) COLLATE pg_catalog."default",
+	store_id bigint,
+	position character varying(255) COLLATE pg_catalog."default"
+)
+
+select * from stg.employees
 -- 7. Insertar nuevos valores a la tabla "employees" para los siguientes 4 empleados:
     -- Juan Perez, 2022-01-01, telefono +541113869867, Argentina, Santa Fe, tienda 2, Vendedor.
     -- Catalina Garcia, 2022-03-01, Argentina, Buenos Aires, tienda 2, Representante Comercial
     -- Ana Valdez, desde 2020-02-21 hasta 2022-03-01, España, Madrid, tienda 8, Jefe Logistica
     -- Fernando Moralez, 2022-04-04, España, Valencia, tienda 9, Vendedor.
 
+insert into stg.employees
+values  (1,'Juan','Perez','2022-01-01',NULL,541113869867,'Argentina','Santa Fe',2, 'Vendedor'),
+		(2,'Catalina','Garcia','2022-03-01',NULL,NULL,'Argentina','Buenos Aires',2, 'Representante Comercial'),
+		(3,'Ana','Valdez','2020-02-21','2022-03-01',NULL,'España','Madrid',8, 'Jefe Logistica'),
+		(4,'Fernando','Moralez','2022-04-04',NULL,NULL,'España','Valencia',9, 'Vendedor')
+)
   
 -- 8. Crear un backup de la tabla "cost" agregandole una columna que se llame "last_updated_ts" que sea el momento exacto en el cual estemos realizando el backup en formato datetime.
-  
+do $$
+
+declare
+	schema_name TEXT := 'bkp';
+	table_name TEXT := 'bkp_cost';
+	full_table_name TEXT := schema_name || '.' || table_name;
+BEGIN
+EXECUTE 'CREATE SCHEMA IF NOT EXISTS ' || quote_ident(schema_name);	
+--CREATE TABLE IF NOT EXISTS bkp.table_name
+EXECUTE 'CREATE TABLE ' || quote_ident(full_table_name) || 
+' (
+    product_code character varying(10) COLLATE pg_catalog."default",
+    product_cost_usd numeric,
+	last_updated_ts date
+)
+ ';
+end $$;
+-- introducimos los datos
+insert into  public."bkp.bkp_cost" 
+(select 
+ 	*,
+ 	now() as last_updated_ts
+ from stg.cost)
+
+select * FROM public."bkp.bkp_cost"  
 -- 9. En caso de hacer un cambio que deba revertirse en la tabla order_line_sale y debemos volver la tabla a su estado original, como lo harias? Responder con palabras que sentencia utilizarias. (no hace falta usar codigo)
+/*Antes de hacer ningún cambio se debe indicar el comienzo de una transacción con el ocmando BEGIN, después, se aplicará el código necesario para
+aplicar cualquier cambio que queramos en la tabla order_line_sale. Si queremos revertir esos cambios, deberemos aplicar el comando ROLLBACK:
+Indicando cual es el código o cambios que queremos revertir.*/
